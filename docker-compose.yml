@@ -1,0 +1,113 @@
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres — backs the LiteLLM Admin UI, virtual keys, and spend tracking.
+  # PG18 moved PGDATA to /var/lib/postgresql/18/docker, so the volume mounts
+  # the PARENT directory (not the old /var/lib/postgresql/data).
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:18
+    container_name: llmprotect-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Presidio — PII + secrets detection (analyzer) and masking (anonymizer).
+  # Called by LiteLLM's built-in presidio guardrail. Internal-only: no ports
+  # published to the host.
+  # ---------------------------------------------------------------------------
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.362
+    container_name: llmprotect-presidio-analyzer
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  presidio-anonymizer:
+    image: mcr.microsoft.com/presidio-anonymizer:2.2.362
+    container_name: llmprotect-presidio-anonymizer
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Injection classifier sidecar — implements LiteLLM's Generic Guardrail API.
+  # Downloads the model into the hf-cache volume on first boot (start_period
+  # in the image healthcheck allows up to 10 minutes for this). Internal-only.
+  # ---------------------------------------------------------------------------
+  guard:
+    build: .
+    image: llmprotect-guard:local
+    container_name: llmprotect-guard
+    restart: unless-stopped
+    environment:
+      - GUARD_MODEL_ID=${GUARD_MODEL_ID:-leolee99/PIGuard}
+      # Pin the exact model revision: the model uses trust_remote_code, so an
+      # unpinned revision would let the upstream repo change the code we run.
+      - GUARD_MODEL_REVISION=${GUARD_MODEL_REVISION:-dd78b24e330193a22d2293ac66922dd4f982f563}
+      - GUARD_TRUST_REMOTE_CODE=${GUARD_TRUST_REMOTE_CODE:-1}
+      - GUARD_THRESHOLD=${GUARD_THRESHOLD:-0.85}
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - hf-cache:/cache
+
+  # ---------------------------------------------------------------------------
+  # LiteLLM Proxy — the only service published to the host. OpenAI-compatible
+  # endpoint on :4000, routes to OpenRouter, applies all guardrails.
+  # Admin UI at http://localhost:4000/ui
+  # ---------------------------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.96.0
+    container_name: llmprotect-litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      # Encrypts provider credentials stored in the DB (UI-managed models).
+      # Set once before adding any model; NEVER rotate afterward.
+      - LITELLM_SALT_KEY=${LITELLM_SALT_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - PRESIDIO_ANALYZER_API_BASE=http://presidio-analyzer:3000
+      - PRESIDIO_ANONYMIZER_API_BASE=http://presidio-anonymizer:3000
+    volumes:
+      - ./config/litellm-config.yaml:/app/config.yaml:ro
+      - ./config/presidio_recognizers.json:/app/config/presidio_recognizers.json:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      db:
+        condition: service_healthy
+      guard:
+        condition: service_healthy
+      presidio-analyzer:
+        condition: service_healthy
+      presidio-anonymizer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  pgdata:
+  hf-cache:

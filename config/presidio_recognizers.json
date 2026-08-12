@@ -1,0 +1,90 @@
+[
+  {
+    "name": "US SSN (ad-hoc)",
+    "supported_language": "en",
+    "supported_entity": "US_SSN",
+    "patterns": [
+      {
+        "name": "ssn dashed",
+        "regex": "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+        "score": 0.6
+      },
+      {
+        "name": "ssn spaced or plain",
+        "regex": "\\b\\d{3}[ ]?\\d{2}[ ]?\\d{4}\\b",
+        "score": 0.3
+      }
+    ],
+    "context": ["ssn", "social", "security"]
+  },
+  {
+    "name": "AWS access key id",
+    "supported_language": "en",
+    "supported_entity": "AWS_ACCESS_KEY_ID",
+    "patterns": [
+      {
+        "name": "aws access key id",
+        "regex": "\\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\\b",
+        "score": 0.9
+      }
+    ],
+    "context": ["aws", "access", "key"]
+  },
+  {
+    "name": "GitHub token",
+    "supported_language": "en",
+    "supported_entity": "GITHUB_TOKEN",
+    "patterns": [
+      {
+        "name": "github classic and app tokens",
+        "regex": "\\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}\\b",
+        "score": 0.9
+      },
+      {
+        "name": "github fine-grained pat",
+        "regex": "\\bgithub_pat_[A-Za-z0-9_]{22,255}\\b",
+        "score": 0.9
+      }
+    ],
+    "context": ["github", "token", "pat"]
+  },
+  {
+    "name": "Private key block",
+    "supported_language": "en",
+    "supported_entity": "PRIVATE_KEY_BLOCK",
+    "patterns": [
+      {
+        "name": "pem private key header",
+        "regex": "-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY(?: BLOCK)?-----",
+        "score": 0.95
+      }
+    ],
+    "context": ["private", "key", "pem"]
+  },
+  {
+    "name": "Slack token",
+    "supported_language": "en",
+    "supported_entity": "SLACK_TOKEN",
+    "patterns": [
+      {
+        "name": "slack token",
+        "regex": "\\bxox[baprs]-[A-Za-z0-9-]{10,250}\\b",
+        "score": 0.9
+      }
+    ],
+    "context": ["slack", "token"]
+  },
+  {
+    "name": "Generic sk- style API key",
+    "supported_language": "en",
+    "supported_entity": "GENERIC_API_KEY",
+    "patterns": [
+      {
+        "name": "sk- prefixed key (OpenAI, Anthropic, OpenRouter style)",
+        "regex": "\\bsk-[A-Za-z0-9_-]{20,}\\b",
+        "score": 0.8
+      }
+    ],
+    "context": ["api", "key", "secret", "token"]
+  }
+]

@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llmprotect-guard"
+version = "0.1.0"
+description = "Prompt-injection classifier sidecar implementing LiteLLM's Generic Guardrail API"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.141",
+    "uvicorn>=0.52",
+    "pydantic>=2.13",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-cov>=6.0",
+    "httpx2>=2.10",
+    "ruff>=0.16",
+]
+# ML stack lives in its own group: installed only in the Docker image
+# (uv sync --group ml), never in local dev venvs or CI test runs.
+ml = [
+    "torch>=2.13",
+    "transformers>=5.15",
+    "sentencepiece>=0.2.2",
+    "protobuf>=7.35",
+]
+
+[tool.uv]
+# CPU-only torch on linux (the PyPI linux wheel drags in CUDA packages);
+# macOS resolves torch from PyPI as usual.
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/guard_api"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["guard_api"]
+omit = [
+    "tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

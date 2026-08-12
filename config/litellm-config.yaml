@@ -1,0 +1,93 @@
+# =============================================================================
+# LiteLLM Proxy configuration
+# =============================================================================
+# OpenAI-compatible endpoint on :4000 -> OpenRouter, with three guardrails:
+#   1. pii-egress-mask   (pre_call)  — Presidio masks PII/secrets BEFORE the
+#                                      prompt leaves the network for OpenRouter
+#   2. prompt-injection  (pre_call)  — classifier sidecar blocks injections
+#   3. pii-response-scan (post_call) — Presidio scans responses on the way back
+# =============================================================================
+
+# Real models are managed in the DATABASE via the Admin UI (Models page), not
+# here — see store_model_in_db below. When adding a model in the UI, set the
+# API key field to `os.environ/OPENROUTER_API_KEY` so the credential stays in
+# the environment instead of the DB. Only infra/test models live in this file.
+model_list:
+  # Guardrail smoke-test model: runs the full guardrail chain but returns a
+  # canned response instead of calling OpenRouter — zero tokens spent.
+  # Used by scripts/test-guardrails.sh.
+  - model_name: guardrail-test
+    litellm_params:
+      model: openai/guardrail-test
+      api_key: "mock"
+      mock_response: "guardrail-test: request passed all guardrails."
+
+guardrails:
+  # Mask PII and secrets in prompts BEFORE they leave for OpenRouter.
+  # output_parse_pii restores original values in the response so masking is
+  # transparent to the caller. Switch any entity to BLOCK to reject instead.
+  - guardrail_name: pii-egress-mask
+    litellm_params:
+      guardrail: presidio
+      mode: "pre_call"
+      default_on: true
+      presidio_language: en
+      output_parse_pii: true
+      presidio_ad_hoc_recognizers: /app/config/presidio_recognizers.json
+      pii_entities_config:
+        # built-in recognizers
+        PERSON: "MASK"
+        EMAIL_ADDRESS: "MASK"
+        PHONE_NUMBER: "MASK"
+        CREDIT_CARD: "MASK"
+        IP_ADDRESS: "MASK"
+        # US_SSN: stock recognizer is dead (returns zero matches); the ad-hoc
+        # recognizer in presidio_recognizers.json actually provides this.
+        US_SSN: "MASK"
+        # secrets — ad-hoc regex recognizers in presidio_recognizers.json
+        AWS_ACCESS_KEY_ID: "MASK"
+        GITHUB_TOKEN: "MASK"
+        PRIVATE_KEY_BLOCK: "MASK"
+        SLACK_TOKEN: "MASK"
+        GENERIC_API_KEY: "MASK"
+
+  # Prompt-injection classifier sidecar via the Generic Guardrail API.
+  # Fails CLOSED: if the sidecar is down or errors, requests are rejected.
+  - guardrail_name: prompt-injection
+    litellm_params:
+      guardrail: generic_guardrail_api
+      mode: "pre_call"
+      default_on: true
+      api_base: http://guard:8080
+      fail_on_error: true
+      unreachable_fallback: fail_closed
+      # Uncomment to override the sidecar's GUARD_THRESHOLD per-guardrail:
+      # additional_provider_specific_params:
+      #   threshold: 0.85
+
+  # Scan model responses coming back from OpenRouter for PII/secrets.
+  - guardrail_name: pii-response-scan
+    litellm_params:
+      guardrail: presidio
+      mode: "post_call"
+      default_on: true
+      presidio_language: en
+      presidio_ad_hoc_recognizers: /app/config/presidio_recognizers.json
+      pii_entities_config:
+        EMAIL_ADDRESS: "MASK"
+        PHONE_NUMBER: "MASK"
+        CREDIT_CARD: "MASK"
+        US_SSN: "MASK"
+        AWS_ACCESS_KEY_ID: "MASK"
+        GITHUB_TOKEN: "MASK"
+        PRIVATE_KEY_BLOCK: "MASK"
+        SLACK_TOKEN: "MASK"
+        GENERIC_API_KEY: "MASK"
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  # Models are added/edited via the Admin UI and stored in Postgres.
+  # Guardrails stay in this file on purpose: security controls remain
+  # version-controlled and can't be toggled off from the UI.
+  store_model_in_db: true
