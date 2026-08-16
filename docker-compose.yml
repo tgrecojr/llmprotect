@@ -26,7 +26,7 @@ services:
   # published to the host.
   # ---------------------------------------------------------------------------
   presidio-analyzer:
-    image: mcr.microsoft.com/presidio-analyzer:2.2.362
+    image: mcr.microsoft.com/presidio-analyzer:2.2.362@sha256:286e3fa7f3a7426e775e8564fe1870f1ba8f999d3ab8bbb8cc46a44355d9d6e9
     container_name: llmprotect-presidio-analyzer
     restart: unless-stopped
     healthcheck:
@@ -37,7 +37,7 @@ services:
       start_period: 60s
 
   presidio-anonymizer:
-    image: mcr.microsoft.com/presidio-anonymizer:2.2.362
+    image: mcr.microsoft.com/presidio-anonymizer:2.2.362@sha256:a10a12a2a613d13cf29d3ad3641e3258444dd8c90403dd644a0a114c472c2483
     container_name: llmprotect-presidio-anonymizer
     restart: unless-stopped
     healthcheck:
@@ -74,7 +74,7 @@ services:
   # Admin UI at http://localhost:4000/ui
   # ---------------------------------------------------------------------------
   litellm:
-    image: ghcr.io/berriai/litellm:v1.96.0
+    image: ghcr.io/berriai/litellm:v1.96.0@sha256:90d8de0ea6fbb3cad145d1019d00a0149ae400b1e18e2011a60f1988f143f672
     container_name: llmprotect-litellm
     restart: unless-stopped
     ports:
