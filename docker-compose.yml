@@ -5,7 +5,7 @@ services:
   # the PARENT directory (not the old /var/lib/postgresql/data).
   # ---------------------------------------------------------------------------
   db:
-    image: postgres:18
+    image: postgres:18@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941
     container_name: llmprotect-db
     restart: unless-stopped
     environment:
