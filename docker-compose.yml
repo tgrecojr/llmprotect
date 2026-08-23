@@ -69,6 +69,18 @@ services:
       # the excerpt shows up in the LiteLLM UI error message. Set 0 to keep
       # prompt excerpts out of logs and the spend table.
       - GUARD_BLOCK_DETAIL=${GUARD_BLOCK_DETAIL:-1}
+      # Sliding-window scan: window size / overlap in chars, and how far a
+      # window start may snap back to a line/sentence/word boundary instead
+      # of opening mid-word (0 = fixed windows). Smaller windows catch
+      # attacks buried in long documents better — but only once clients
+      # keep their own instructions out of the scanned user message
+      # (docs/guardrails.md "Chunk size").
+      - GUARD_CHUNK_CHARS=${GUARD_CHUNK_CHARS:-2000}
+      - GUARD_CHUNK_OVERLAP=${GUARD_CHUNK_OVERLAP:-200}
+      - GUARD_CHUNK_SNAP=${GUARD_CHUNK_SNAP:-200}
+      # Re-score a hit in [threshold, threshold+margin) with a 2x window
+      # before blocking. Off: measured to dilute real attacks.
+      - GUARD_MARGIN=${GUARD_MARGIN:-0}
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       - hf-cache:/cache

@@ -1,0 +1,21 @@
+Subject: [example-org/example-repo] PR run failed: Run Tests - fix/chunk-snap (a1b2c3d)
+From: GitHub <notifications@github.com>
+Date: Sat, 23 Aug 2026 13:18:00 -0400
+
+Body:
+Run Tests: Some jobs were not successful
+
+example-org/example-repo
+PR run failed for fix/chunk-snap (a1b2c3d)
+
+Failed job: test (3.14)
+
+  FAILED tests/test_chunking.py::test_drift_does_not_accumulate - AssertionError
+  assert 19 == 17
+  ===== 1 failed, 236 passed in 0.41s =====
+  Error: Process completed with exit code 1.
+
+View workflow run < https://github.com >
+
+You are receiving this because you are subscribed to this repository.
+Manage your GitHub Actions notifications < https://github.com >

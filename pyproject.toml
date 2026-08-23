@@ -55,6 +55,9 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "ml: needs the `ml` dependency group and downloads the guard model (skipped otherwise)",
+]
 
 [tool.coverage.run]
 source = ["guard_api"]

@@ -30,7 +30,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from guard_api.classifier import BENIGN_LABELS, chunk_text  # noqa: E402
+from guard_api.chunking import chunk_spans, context_window  # noqa: E402
+from guard_api.classifier import DEFAULT_MARGIN, InjectionClassifier  # noqa: E402
 
 URL_RE = re.compile(r"https?://([^/\s)>\]]+)[^\s)>\]]*")
 
@@ -82,48 +83,56 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, default=0.85)
     parser.add_argument("--chunk-chars", type=int, default=2000)
     parser.add_argument("--chunk-overlap", type=int, default=200)
+    parser.add_argument("--chunk-snap", type=int, default=200, help="0 = fixed windows")
+    parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN, help="0 = no re-score")
     args = parser.parse_args()
 
-    from transformers import pipeline  # heavy import, deferred
-
-    pipe = pipeline(
-        "text-classification",
-        model=args.model,
+    clf = InjectionClassifier(
+        model_id=args.model,
         revision=args.revision or None,
         trust_remote_code=os.environ.get("GUARD_TRUST_REMOTE_CODE", "1") == "1",
-        device="cpu",
-        top_k=None,
-        truncation=True,
+        chunk_chars=args.chunk_chars,
+        chunk_overlap=args.chunk_overlap,
+        chunk_snap=args.chunk_snap,
+        margin=args.margin,
     )
 
-    print(f"model={args.model} revision={args.revision or 'default'} threshold={args.threshold}")
+    print(
+        f"model={args.model} revision={args.revision or 'default'} threshold={args.threshold}"
+        f" snap={args.chunk_snap} margin={args.margin}"
+    )
     any_blocked = False
     for name, text in load_views(args.source).items():
-        chunks = chunk_text(text, args.chunk_chars, args.chunk_overlap) if text.strip() else []
-        results = pipe(chunks) if chunks else []
-        if results and isinstance(results[0], dict):
-            results = [results]
-        worst = max(
-            (
-                float(s["score"])
-                for scores in results
-                for s in scores
-                if s["label"].lower() not in BENIGN_LABELS
-            ),
-            default=0.0,
-        )
-        verdict = "BLOCKED" if worst >= args.threshold else "pass"
-        any_blocked |= verdict == "BLOCKED"
-        print(f"\n== {name}: risk={worst:.3f} {verdict}  (len={len(text)}, chunks={len(chunks)})")
-        for i, (chunk, scores) in enumerate(zip(chunks, results, strict=True)):
-            risk = max(
-                (float(s["score"]) for s in scores if s["label"].lower() not in BENIGN_LABELS),
-                default=0.0,
-            )
-            flag = "<<" if risk >= args.threshold else "  "
-            preview = " ".join(chunk.split())[:100]
-            print(f"  {flag} chunk {i + 1}/{len(chunks)} risk={risk:.3f}  {preview!r}")
+        any_blocked |= score_view(clf, name, text, args)
     return 1 if any_blocked else 0
+
+
+def score_view(clf: InjectionClassifier, name: str, text: str, args) -> bool:
+    """Print per-chunk scores (and the contextual re-score of a marginal
+    hit) for one view; True if the guard would block it."""
+    if not text.strip():
+        print(f"\n== {name}: empty")
+        return False
+    spans = chunk_spans(text, args.chunk_chars, args.chunk_overlap, args.chunk_snap)
+    chunks = [text[a:b] for a, b in spans]
+    scores = clf.score_texts(chunks)
+    worst = max(range(len(chunks)), key=lambda i: (scores[i], -i))
+    decided, note = scores[worst], ""
+    if args.margin > 0 and args.threshold <= scores[worst] < args.threshold + args.margin:
+        a, b = context_window(text, spans[worst], 2 * args.chunk_chars, args.chunk_snap)
+        if (a, b) != spans[worst]:
+            decided = clf.score_texts([text[a:b]])[0]
+            note = f" context[{a}:{b}]={decided:.3f}"
+    verdict = "BLOCKED" if decided >= args.threshold else "pass"
+    print(
+        f"\n== {name}: risk={scores[worst]:.3f}{note} {verdict}"
+        f"  (len={len(text)}, chunks={len(chunks)})"
+    )
+    for i, ((a, b), chunk, risk) in enumerate(zip(spans, chunks, scores, strict=True)):
+        flag = "<<" if risk >= args.threshold else "  "
+        preview = " ".join(chunk.split())[:100]
+        print(f"  {flag} chunk {i + 1}/{len(chunks)} [{a}:{b}] risk={risk:.3f}  {preview!r}")
+    return verdict == "BLOCKED"
 
 
 if __name__ == "__main__":

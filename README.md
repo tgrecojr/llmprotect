@@ -82,6 +82,13 @@ disable response buffering so streaming works.
   raise for fewer false positives). Restart with `docker compose restart guard litellm`.
   Note that confident false positives score 0.99+, so the threshold cannot fix
   them — fix the input (see `docs/guardrails.md`) or swap the model.
+- **Scan windows** — `GUARD_CHUNK_CHARS`/`GUARD_CHUNK_OVERLAP` (2000/200),
+  `GUARD_CHUNK_SNAP` (200; window starts snap to a line/sentence/word
+  boundary, `0` = fixed windows), `GUARD_MARGIN` (0; opt-in re-score of
+  marginal hits in a wider window — measured to let attacks through, see
+  `docs/guardrails.md`). Smaller windows catch buried attacks far better,
+  but only after client apps keep their own instructions in the `system`
+  message rather than the scanned `user` message.
 - **PII entities / MASK vs BLOCK** — `pii_entities_config` in
   `config/litellm-config.yaml`.
 - **Secrets patterns** — `config/presidio_recognizers.json` (regex ad-hoc
@@ -100,7 +107,10 @@ uv run pytest --cov
 ```
 
 Tests stub the classifier — the ML dependency group (`torch`, `transformers`)
-is only installed inside the Docker image (`uv sync --group ml`). Dependencies
+is only installed inside the Docker image (`uv sync --group ml`). The
+acceptance tests against the real model (`tests/test_ml_integration.py`,
+marker `ml`) are skipped unless run from a throwaway ML env (see the header
+of `scripts/score.py`); they print the score table kept in `docs/guardrails.md`. Dependencies
 use range floors in `pyproject.toml` with `uv.lock` for reproducibility;
 Renovate maintains the lock and keeps the Chainguard builder/runtime images in
 lockstep (see `renovate.json`).
@@ -111,7 +121,8 @@ See `.env.example`. Required: `OPENROUTER_API_KEY`, `LITELLM_MASTER_KEY`,
 `LITELLM_SALT_KEY` (set before adding models in the UI; never rotate),
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`. Optional:
 `GUARD_MODEL_ID`, `GUARD_MODEL_REVISION`, `GUARD_TRUST_REMOTE_CODE`,
-`GUARD_THRESHOLD`, `GUARD_BLOCK_DETAIL`, `HF_TOKEN`.
+`GUARD_THRESHOLD`, `GUARD_BLOCK_DETAIL`, `GUARD_CHUNK_CHARS`,
+`GUARD_CHUNK_OVERLAP`, `GUARD_CHUNK_SNAP`, `GUARD_MARGIN`, `HF_TOKEN`.
 
 ## Limitations (read before trusting it)
 
