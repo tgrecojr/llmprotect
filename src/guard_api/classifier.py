@@ -55,6 +55,9 @@ class RiskResult:
     excerpt: str
     rescored: bool = False
     rescore: float | None = None
+    # Every chunk's score in order (captured for offline replay; empty when a
+    # stub or an older caller didn't supply them).
+    chunk_scores: tuple[float, ...] = ()
 
     @property
     def location(self) -> str:
@@ -135,6 +138,7 @@ class InjectionClassifier:
             chunk_index=index,
             chunk_count=len(chunks),
             excerpt=make_excerpt(chunks[index]),
+            chunk_scores=tuple(scores),
         )
         if threshold is None or self._margin <= 0:
             return worst

@@ -28,6 +28,9 @@ must not be reintroduced (see docs/guardrails.md).
 - `scripts/score.py <file|.eml|->` — explain a guard decision offline with
   per-chunk scores (needs the `ml` group in a throwaway venv outside `.venv`;
   see the script header)
+- `scripts/replay.py data/guard-capture/*.jsonl [--chunk-chars N …]` —
+  re-score captured real traffic (GUARD_CAPTURE_DIR) under candidate
+  settings; prints flipped verdicts (same ML venv as score.py)
 - `scripts/bench-guard-models.py [marketing.eml]` — PIGuard vs Prompt Guard 2
   on the FP/FN probe sets; rerun before changing GUARD_MODEL_ID/REVISION
 - `uv sync --frozen` — dev env (dev group only; ML group is Docker-only)
@@ -55,6 +58,10 @@ must not be reintroduced (see docs/guardrails.md).
 - `src/guard_api/chunking.py` — sliding windows whose starts snap back to a
   boundary (GUARD_CHUNK_SNAP); `context_window()` backs the opt-in marginal
   re-score (GUARD_MARGIN, default off — measured to let attacks through)
+- `src/guard_api/capture.py` — opt-in JSONL capture of every scanned text +
+  verdict + per-chunk scores (GUARD_CAPTURE_DIR, off by default); lands in
+  `./data/` on the host via the `./data:/app/data` mount — gitignored, real
+  (masked) mail, never commit
 - `tests/test_ml_integration.py` (marker `ml`) — acceptance run against the
   real model from a throwaway ML env; `tests/fixtures/build_cta.py` builds
   the synthetic newsletter/probe sets; `tests/fixtures/*.eml` are gitignored
@@ -75,4 +82,4 @@ DB-stored model credentials — set before first model is added, never rotate),
 POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB.
 Optional: GUARD_MODEL_ID, GUARD_MODEL_REVISION, GUARD_TRUST_REMOTE_CODE,
 GUARD_THRESHOLD, GUARD_BLOCK_DETAIL, GUARD_CHUNK_CHARS, GUARD_CHUNK_OVERLAP,
-GUARD_LOG_LEVEL, HF_TOKEN.
+GUARD_LOG_LEVEL, GUARD_CAPTURE_DIR, HF_TOKEN.
