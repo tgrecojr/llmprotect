@@ -8,11 +8,24 @@
 #   3. pii-response-scan (post_call) — Presidio scans responses on the way back
 # =============================================================================
 
-# Real models are managed in the DATABASE via the Admin UI (Models page), not
-# here — see store_model_in_db below. When adding a model in the UI, set the
-# API key field to `os.environ/OPENROUTER_API_KEY` so the credential stays in
-# the environment instead of the DB. Only infra/test models live in this file.
+# Routing lives in two places:
+#   - The `openrouter/*` wildcard below forwards ANY OpenRouter model id to
+#     OpenRouter, so clients send e.g. `openrouter/anthropic/claude-sonnet-4.5`
+#     and new upstream models work with no config change. All guardrails
+#     apply (default_on: true).
+#   - Optional friendly aliases (e.g. `sonnet` -> a specific OpenRouter model)
+#     are managed in the DATABASE via the Admin UI (Models page) — see
+#     store_model_in_db below. When adding one in the UI, set the API key field
+#     to `os.environ/OPENROUTER_API_KEY` so the credential stays in the
+#     environment instead of the DB.
 model_list:
+  # Wildcard passthrough to OpenRouter. Restrict which models a given app may
+  # use per virtual key (the `models` field on /key/generate), not here.
+  - model_name: "openrouter/*"
+    litellm_params:
+      model: "openrouter/*"
+      api_key: os.environ/OPENROUTER_API_KEY
+
   # Guardrail smoke-test model: runs the full guardrail chain but returns a
   # canned response instead of calling OpenRouter — zero tokens spent.
   # Used by scripts/test-guardrails.sh.
