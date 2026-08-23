@@ -29,6 +29,10 @@ class Settings:
     # wider window dilutes real attacks (docs/guardrails.md), so this is an
     # experiment knob, not a fix.
     margin: float = 0.0
+    # Root log level for the container. Must be at least INFO for the
+    # per-call `scored …` lines to be emitted — WARNING would leave only
+    # block lines, hiding near-misses and drift.
+    log_level: str = "INFO"
 
 
 def _flag(name: str, default: str) -> bool:
@@ -46,4 +50,5 @@ def load_settings() -> Settings:
         block_detail=_flag("GUARD_BLOCK_DETAIL", "1"),
         chunk_snap=int(os.environ.get("GUARD_CHUNK_SNAP", "200")),
         margin=float(os.environ.get("GUARD_MARGIN", "0")),
+        log_level=os.environ.get("GUARD_LOG_LEVEL", "INFO").strip().upper(),
     )

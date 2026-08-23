@@ -109,6 +109,15 @@ def test_snap_and_margin_settings(monkeypatch):
     assert load_settings().margin == 0.10
 
 
+def test_log_level_defaults_to_info(monkeypatch):
+    from guard_api.settings import load_settings
+
+    monkeypatch.delenv("GUARD_LOG_LEVEL", raising=False)
+    assert load_settings().log_level == "INFO"
+    monkeypatch.setenv("GUARD_LOG_LEVEL", "warning")
+    assert load_settings().log_level == "WARNING"
+
+
 def test_make_excerpt_flattens_and_truncates():
     assert make_excerpt("  a\n\n b\tc ") == "a b c"
     long = "word " * 100

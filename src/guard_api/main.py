@@ -83,6 +83,14 @@ def create_app(classifier: Any = None, settings: Settings | None = None) -> Fast
     during startup (so the container only turns healthy once it can score)."""
     app_settings = settings or load_settings()
 
+    # Without a root handler only WARNING+ escapes (Python's last-resort
+    # handler), so the per-call `scored …` INFO lines never reach the
+    # container log. No-op if a handler is already configured (tests).
+    logging.basicConfig(
+        level=app_settings.log_level,
+        format="%(levelname)s:     %(message)s",
+    )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if app.state.classifier is None:

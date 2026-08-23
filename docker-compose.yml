@@ -81,6 +81,9 @@ services:
       # Re-score a hit in [threshold, threshold+margin) with a 2x window
       # before blocking. Off: measured to dilute real attacks.
       - GUARD_MARGIN=${GUARD_MARGIN:-0}
+      # INFO emits the per-call `scored …` lines (near-miss/drift
+      # visibility in Loki); WARNING would log blocks only.
+      - GUARD_LOG_LEVEL=${GUARD_LOG_LEVEL:-INFO}
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       - hf-cache:/cache
