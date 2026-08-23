@@ -27,8 +27,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --group ml --no-editable
 
 # /cache holds the HF model download (mounted as a named volume in compose);
-# it must exist in the image owned by nonroot or the volume inherits root.
-RUN mkdir -p /cache && chown -R nonroot:nonroot /app /cache
+# /app/data is the bind mount for opt-in traffic capture (GUARD_CAPTURE_DIR).
+# Both must exist in the image owned by nonroot or the mount inherits root.
+RUN mkdir -p /cache /app/data && chown -R nonroot:nonroot /app /cache
 
 FROM cgr.dev/chainguard/python:latest@sha256:1f6779775c9f466890da563e411cb677045a6c20b6a65160eefad1deffb5012c
 
@@ -36,6 +37,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=nonroot:nonroot /app/.venv /app/.venv
 COPY --from=builder --chown=nonroot:nonroot /cache /cache
+COPY --from=builder --chown=nonroot:nonroot /app/data /app/data
 
 ENV PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/cache \

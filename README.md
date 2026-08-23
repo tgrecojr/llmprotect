@@ -78,6 +78,16 @@ disable response buffering so streaming works.
   `scripts/score.py` against the text or `.eml` (see the script header; it
   needs the `ml` dependency group in a throwaway venv). Details and known
   false-positive triggers are in `docs/guardrails.md`.
+- **Build a test bed from real traffic** — set `GUARD_CAPTURE_DIR=/app/data/guard-capture`
+  in `.env` and every scanned (Presidio-masked) text lands with its verdict
+  and per-chunk scores in `./data/guard-capture/YYYY-MM-DD.jsonl` on the
+  host (gitignored; run `mkdir -p data` once before starting so the mount
+  is not root-owned — the sidecar runs as `nonroot` and otherwise logs
+  `capture disabled` and carries on). Let it run for a while, then replay the files under
+  candidate settings and see which verdicts flip:
+  `scripts/replay.py data/guard-capture/*.jsonl --chunk-chars 500 --only-changed`
+  (same throwaway ML venv as `score.py`). Unset to stop capturing; delete the
+  directory when done — it is real mail.
 - **Injection sensitivity** — `GUARD_THRESHOLD` in `.env` (default `0.85`;
   raise for fewer false positives). Restart with `docker compose restart guard litellm`.
   Note that confident false positives score 0.99+, so the threshold cannot fix
@@ -122,7 +132,8 @@ See `.env.example`. Required: `OPENROUTER_API_KEY`, `LITELLM_MASTER_KEY`,
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`. Optional:
 `GUARD_MODEL_ID`, `GUARD_MODEL_REVISION`, `GUARD_TRUST_REMOTE_CODE`,
 `GUARD_THRESHOLD`, `GUARD_BLOCK_DETAIL`, `GUARD_CHUNK_CHARS`,
-`GUARD_CHUNK_OVERLAP`, `GUARD_CHUNK_SNAP`, `GUARD_MARGIN`, `HF_TOKEN`.
+`GUARD_CHUNK_OVERLAP`, `GUARD_CHUNK_SNAP`, `GUARD_MARGIN`, `GUARD_LOG_LEVEL`,
+`GUARD_CAPTURE_DIR`, `HF_TOKEN`.
 
 ## Limitations (read before trusting it)
 

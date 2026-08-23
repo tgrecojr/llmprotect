@@ -271,6 +271,21 @@ pages, tickets) through the proxy:**
   offline with per-chunk scores (and offsets) and, for `.eml` input, scores
   the plain/HTML/URL-normalised views side by side; `--chunk-snap 0` /
   `--margin` mirror the sidecar knobs.
+- **Capturing real traffic (`GUARD_CAPTURE_DIR`, default off).** With it set
+  (compose maps `./data` to `/app/data`, so `/app/data/guard-capture`), the
+  sidecar appends one JSON record per scanned text to
+  `<dir>/YYYY-MM-DD.jsonl`: timestamp, `call_id`, `text_index`, `sha256`
+  and length of the text, threshold, `blocked`, the winning score (and the
+  context re-score when one decided), every chunk's score, the config that
+  produced them (model/revision/chunk knobs), an empty `label`, and the
+  masked text itself. A write failure is logged, never surfaced to LiteLLM.
+  `scripts/replay.py <files> [--chunk-chars … --threshold … --margin …]`
+  re-scores the unique texts and prints `old->new` per record with
+  `FLIP` markers plus a blocked before/after count; fill `label` with
+  `attack`/`benign` by hand and it also counts FP/FN. This is how the
+  synthetic probe sets get replaced by measured traffic before touching
+  `GUARD_CHUNK_CHARS`. The directory holds real (masked) mail: gitignored,
+  not baked into the image, delete when done.
 - `GUARD_CHUNK_CHARS` / `GUARD_CHUNK_OVERLAP`: window size and overlap (see
   "Chunk size" — shrink the window only after clients keep their
   instructions out of `user`).

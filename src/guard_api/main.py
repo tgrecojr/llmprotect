@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from pydantic import BaseModel, ConfigDict
 
+from guard_api.capture import Capture
 from guard_api.settings import Settings, load_settings
 
 logger = logging.getLogger("guard_api")
@@ -112,6 +113,15 @@ def create_app(classifier: Any = None, settings: Settings | None = None) -> Fast
     app = FastAPI(title="llmprotect guard", lifespan=lifespan)
     app.state.classifier = classifier
     app.state.settings = app_settings
+    app.state.capture = None
+    if app_settings.capture_dir:
+        # A bad mount (e.g. root-owned ./data created by Docker) must not
+        # take the guard — and with it every LiteLLM call — down.
+        try:
+            app.state.capture = Capture(app_settings.capture_dir, app_settings.capture_config())
+            logger.info("capturing scanned texts to %s", app_settings.capture_dir)
+        except OSError as exc:
+            logger.error("capture disabled: cannot use %s: %s", app_settings.capture_dir, exc)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -143,6 +153,14 @@ def create_app(classifier: Any = None, settings: Settings | None = None) -> Fast
                 threshold,
                 result.chunk_count,
             )
+            if request.app.state.capture is not None:
+                request.app.state.capture.write(
+                    text,
+                    result,
+                    call_id=req.litellm_call_id,
+                    text_index=index,
+                    threshold=threshold,
+                )
             if result.blocks(threshold):
                 # The excerpt (already Presidio-masked upstream) is emitted
                 # unless GUARD_BLOCK_DETAIL=0 — one switch governs both the

@@ -45,3 +45,6 @@ htmlcov/
 
 # Real emails used as local-only guard fixtures (personal data; never commit)
 tests/fixtures/*.eml
+
+# Guard traffic capture (GUARD_CAPTURE_DIR bind mount; real prompt text)
+data/

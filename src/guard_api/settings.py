@@ -33,6 +33,23 @@ class Settings:
     # per-call `scored …` lines to be emitted — WARNING would leave only
     # block lines, hiding near-misses and drift.
     log_level: str = "INFO"
+    # When set, every scanned text and its verdict is appended as JSONL under
+    # this directory (one file per UTC day) so real traffic can be replayed
+    # offline with scripts/replay.py. Off (None) by default: it stores real,
+    # albeit Presidio-masked, prompt text on disk.
+    capture_dir: str | None = None
+
+    def capture_config(self) -> dict[str, object]:
+        """The knobs that produced a score — stored with each capture record
+        so a replay knows what it is diffing against."""
+        return {
+            "model_id": self.model_id,
+            "model_revision": self.model_revision,
+            "chunk_chars": self.chunk_chars,
+            "chunk_overlap": self.chunk_overlap,
+            "chunk_snap": self.chunk_snap,
+            "margin": self.margin,
+        }
 
 
 def _flag(name: str, default: str) -> bool:
@@ -51,4 +68,5 @@ def load_settings() -> Settings:
         chunk_snap=int(os.environ.get("GUARD_CHUNK_SNAP", "200")),
         margin=float(os.environ.get("GUARD_MARGIN", "0")),
         log_level=os.environ.get("GUARD_LOG_LEVEL", "INFO").strip().upper(),
+        capture_dir=os.environ.get("GUARD_CAPTURE_DIR", "").strip() or None,
     )
