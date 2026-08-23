@@ -47,17 +47,41 @@ Uses the `guardrail-test` mock model: the full guardrail chain runs, but the
 upstream call is stubbed. Verifies injection blocking and exercises PII/secrets
 masking (masked values visible in the UI request logs).
 
-Models are managed in the Admin UI (Models page) and stored in Postgres —
-add your OpenRouter models there, setting the API key field to
-`os.environ/OPENROUTER_API_KEY` so the credential stays out of the DB. Then
-point real clients at `http://<host>:4000/v1` using the model names you
-created. Guardrails stay version-controlled in `config/litellm-config.yaml`
-(deliberately not UI-editable).
+## Using it from your apps
+
+`config/litellm-config.yaml` defines an `openrouter/*` wildcard route, so any
+OpenRouter model id works as-is with an `openrouter/` prefix — no per-model
+setup. Mint a virtual key per app (Admin UI → Virtual Keys, or
+`POST /key/generate` with the master key; restrict `models` / set a budget
+there), then configure the app like any OpenAI-compatible endpoint:
+
+```bash
+OPENAI_BASE_URL=https://<host>/v1          # :4000 behind your TLS reverse proxy
+OPENAI_API_KEY=sk-<virtual key for this app>
+# model: openrouter/anthropic/claude-sonnet-4.5
+```
+
+Optional friendly aliases (e.g. `sonnet` → a specific OpenRouter model) are
+managed in the Admin UI (Models page) and stored in Postgres — set the API key
+field to `os.environ/OPENROUTER_API_KEY` so the credential stays out of the
+DB. Guardrails stay version-controlled in `config/litellm-config.yaml`
+(deliberately not UI-editable). If you front LiteLLM with a reverse proxy,
+disable response buffering so streaming works.
 
 ## Tuning
 
+- **Why was this blocked?** — the LiteLLM error message names the offending
+  chunk and quotes a short (Presidio-masked) excerpt; set
+  `GUARD_BLOCK_DETAIL=0` in `.env` to keep prompt excerpts out of the spend
+  table and guard logs. Every scan is also logged with its score:
+  `docker compose logs guard | grep scored`. To reproduce offline, run
+  `scripts/score.py` against the text or `.eml` (see the script header; it
+  needs the `ml` dependency group in a throwaway venv). Details and known
+  false-positive triggers are in `docs/guardrails.md`.
 - **Injection sensitivity** — `GUARD_THRESHOLD` in `.env` (default `0.85`;
   raise for fewer false positives). Restart with `docker compose restart guard litellm`.
+  Note that confident false positives score 0.99+, so the threshold cannot fix
+  them — fix the input (see `docs/guardrails.md`) or swap the model.
 - **PII entities / MASK vs BLOCK** — `pii_entities_config` in
   `config/litellm-config.yaml`.
 - **Secrets patterns** — `config/presidio_recognizers.json` (regex ad-hoc
@@ -87,7 +111,7 @@ See `.env.example`. Required: `OPENROUTER_API_KEY`, `LITELLM_MASTER_KEY`,
 `LITELLM_SALT_KEY` (set before adding models in the UI; never rotate),
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`. Optional:
 `GUARD_MODEL_ID`, `GUARD_MODEL_REVISION`, `GUARD_TRUST_REMOTE_CODE`,
-`GUARD_THRESHOLD`, `HF_TOKEN`.
+`GUARD_THRESHOLD`, `GUARD_BLOCK_DETAIL`, `HF_TOKEN`.
 
 ## Limitations (read before trusting it)
 

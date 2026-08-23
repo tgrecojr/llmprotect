@@ -61,6 +61,14 @@ def texts_to_scan(req: GuardrailRequest) -> list[str]:
     return req.texts or []
 
 
+def blocked_reason(result: Any, threshold: float, detail: bool) -> str:
+    """Human-readable reason that LiteLLM surfaces as the error message."""
+    reason = f"prompt injection detected (risk={result.score:.3f} >= threshold {threshold})"
+    if detail:
+        reason += f" in {result.location}: {result.excerpt!r}"
+    return reason
+
+
 def create_app(classifier: Any = None, settings: Settings | None = None) -> FastAPI:
     """classifier is injectable for tests; None means load the real model
     during startup (so the container only turns healthy once it can score)."""
@@ -102,20 +110,34 @@ def create_app(classifier: Any = None, settings: Settings | None = None) -> Fast
         if "threshold" in extra:
             threshold = float(extra["threshold"])
 
-        for text in texts_to_scan(req):
-            score = request.app.state.classifier.risk_score(text)
-            if score >= threshold:
+        for index, text in enumerate(texts_to_scan(req)):
+            result = request.app.state.classifier.assess(text)
+            # Every score is logged (not just blocks) so near-misses and drift
+            # are visible: `docker compose logs guard | grep scored`.
+            logger.info(
+                "scored call_id=%s text=%d risk=%.3f threshold=%.2f chunks=%d",
+                req.litellm_call_id,
+                index,
+                result.score,
+                threshold,
+                result.chunk_count,
+            )
+            if result.score >= threshold:
+                # The excerpt (already Presidio-masked upstream) is emitted
+                # unless GUARD_BLOCK_DETAIL=0 — one switch governs both the
+                # container log and the LiteLLM-visible reason.
                 logger.warning(
-                    "blocked call_id=%s risk=%.3f threshold=%.2f",
+                    "blocked call_id=%s text=%d risk=%.3f threshold=%.2f %s excerpt=%r",
                     req.litellm_call_id,
-                    score,
+                    index,
+                    result.score,
                     threshold,
+                    result.location,
+                    result.excerpt if app_settings.block_detail else "<off>",
                 )
                 return GuardrailResponse(
                     action="BLOCKED",
-                    blocked_reason=(
-                        f"prompt injection detected (risk={score:.3f} >= threshold {threshold})"
-                    ),
+                    blocked_reason=blocked_reason(result, threshold, app_settings.block_detail),
                 )
         return GuardrailResponse(action="NONE")
 

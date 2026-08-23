@@ -64,6 +64,11 @@ services:
       - GUARD_MODEL_REVISION=${GUARD_MODEL_REVISION:-dd78b24e330193a22d2293ac66922dd4f982f563}
       - GUARD_TRUST_REMOTE_CODE=${GUARD_TRUST_REMOTE_CODE:-1}
       - GUARD_THRESHOLD=${GUARD_THRESHOLD:-0.85}
+      # blocked_reason (and the guard log line) name the offending chunk and
+      # include a ~120-char excerpt. Text is already Presidio-masked by then;
+      # the excerpt shows up in the LiteLLM UI error message. Set 0 to keep
+      # prompt excerpts out of logs and the spend table.
+      - GUARD_BLOCK_DETAIL=${GUARD_BLOCK_DETAIL:-1}
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       - hf-cache:/cache

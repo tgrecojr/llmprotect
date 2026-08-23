@@ -6,6 +6,7 @@ from guard_api.classifier import chunk_text
 def test_short_text_single_chunk():
     assert chunk_text("hello", size=100, overlap=10) == ["hello"]
 
+
 def test_long_text_chunks_cover_everything():
     text = "a" * 5000
     chunks = chunk_text(text, size=2000, overlap=200)
