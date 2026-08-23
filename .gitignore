@@ -42,3 +42,6 @@ htmlcov/
 
 # Added by ggshield
 .cache_ggshield
+
+# Real emails used as local-only guard fixtures (personal data; never commit)
+tests/fixtures/*.eml

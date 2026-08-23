@@ -20,6 +20,15 @@ class Settings:
     # guard log and the LiteLLM error message / spend log. On by default;
     # set GUARD_BLOCK_DETAIL=0 to keep prompt excerpts out of those places.
     block_detail: bool = True
+    # How far (chars) a chunk start may move back to land on a blank line /
+    # line break / sentence end / whitespace instead of mid-word. 0 = fixed
+    # windows exactly as before.
+    chunk_snap: int = 200
+    # A hit scoring in [threshold, threshold + margin) is re-scored inside a
+    # wider window before it may block. 0 (default) = never re-score; the
+    # wider window dilutes real attacks (docs/guardrails.md), so this is an
+    # experiment knob, not a fix.
+    margin: float = 0.0
 
 
 def _flag(name: str, default: str) -> bool:
@@ -35,4 +44,6 @@ def load_settings() -> Settings:
         chunk_chars=int(os.environ.get("GUARD_CHUNK_CHARS", "2000")),
         chunk_overlap=int(os.environ.get("GUARD_CHUNK_OVERLAP", "200")),
         block_detail=_flag("GUARD_BLOCK_DETAIL", "1"),
+        chunk_snap=int(os.environ.get("GUARD_CHUNK_SNAP", "200")),
+        margin=float(os.environ.get("GUARD_MARGIN", "0")),
     )

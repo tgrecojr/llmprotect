@@ -24,11 +24,21 @@ ENDPOINT = "/beta/litellm_basic_guardrail_api"
 
 class StubClassifier:
     """Scores 0.99 when the text contains INJECT, else 0.01. Reports the
-    hit as chunk 2 of 3 so tests can check location plumbing."""
+    hit as chunk 2 of 3 so tests can check location plumbing. MARGINAL-CONFIRM
+    / MARGINAL-CLEAR simulate a re-scored marginal hit that the wider
+    context confirmed (0.91) or cleared (0.40)."""
 
-    def assess(self, text: str) -> RiskResult:
+    def __init__(self) -> None:
+        self.thresholds: list[float] = []
+
+    def assess(self, text: str, threshold: float | None = None) -> RiskResult:
+        self.thresholds.append(threshold)
         if "INJECT" in text:
             return RiskResult(score=0.99, chunk_index=1, chunk_count=3, excerpt="INJECT payload")
+        if "MARGINAL-CONFIRM" in text:
+            return RiskResult(0.86, 1, 3, "cta copy", rescored=True, rescore=0.91)
+        if "MARGINAL-CLEAR" in text:
+            return RiskResult(0.86, 1, 3, "cta copy", rescored=True, rescore=0.40)
         return RiskResult(score=0.01, chunk_index=0, chunk_count=1, excerpt="")
 
 
@@ -168,6 +178,66 @@ def test_threshold_override_via_provider_params(client):
         },
     )
     assert resp.json()["action"] == "BLOCKED"
+
+
+def test_threshold_is_passed_to_classifier():
+    app = create_app(classifier=StubClassifier(), settings=SETTINGS)
+    with TestClient(app) as client:
+        client.post(ENDPOINT, json={"texts": ["a"], "input_type": "request"})
+        client.post(
+            ENDPOINT,
+            json={
+                "texts": ["b"],
+                "input_type": "request",
+                "additional_provider_specific_params": {"threshold": 0.5},
+            },
+        )
+    assert app.state.classifier.thresholds == [0.85, 0.5]
+
+
+# --- marginal re-score plumbing (spec §6.4) ----------------------------------
+
+
+def test_blocked_reason_includes_context_score_when_rescored(client):
+    resp = client.post(ENDPOINT, json={"texts": ["MARGINAL-CONFIRM"], "input_type": "request"})
+    body = resp.json()
+    assert body["action"] == "BLOCKED"
+    assert body["blocked_reason"] == (
+        "prompt injection detected (risk=0.860 (context 0.910) >= threshold 0.85)"
+        " in chunk 2/3: 'cta copy'"
+    )
+
+
+def test_rescored_block_log_carries_context(client, caplog):
+    with caplog.at_level(logging.WARNING, logger="guard_api"):
+        client.post(ENDPOINT, json={"texts": ["MARGINAL-CONFIRM"], "input_type": "request"})
+    blocked = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(blocked) == 1
+    assert "risk=0.860 (context 0.910)" in blocked[0]
+
+
+def test_rescored_pass_logs_scored_not_blocked(client, caplog):
+    with caplog.at_level(logging.INFO, logger="guard_api"):
+        resp = client.post(
+            ENDPOINT,
+            json={"texts": ["MARGINAL-CLEAR"], "input_type": "request", "litellm_call_id": "c2"},
+        )
+    assert resp.json()["action"] == "NONE"
+    messages = [r.getMessage() for r in caplog.records]
+    scored = [m for m in messages if m.startswith("scored call_id=c2")]
+    assert len(scored) == 1
+    assert "risk=0.860 context=0.400 threshold=0.85 chunks=3" in scored[0]
+    assert not any(m.startswith("blocked") for m in messages)
+
+
+def test_none_when_below_threshold_unchanged(client, caplog):
+    with caplog.at_level(logging.INFO, logger="guard_api"):
+        resp = client.post(
+            ENDPOINT, json={"texts": ["fine"], "input_type": "request", "litellm_call_id": "c3"}
+        )
+    assert resp.json()["action"] == "NONE"
+    scored = [r.getMessage() for r in caplog.records if r.getMessage().startswith("scored")]
+    assert scored == ["scored call_id=c3 text=0 risk=0.010 threshold=0.85 chunks=1"]
 
 
 def test_unknown_fields_ignored(client):

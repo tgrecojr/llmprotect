@@ -32,6 +32,8 @@ must not be reintroduced (see docs/guardrails.md).
   on the FP/FN probe sets; rerun before changing GUARD_MODEL_ID/REVISION
 - `uv sync --frozen` — dev env (dev group only; ML group is Docker-only)
 - `uv run pytest --cov` — sidecar tests (classifier is stubbed; 75% gate in CI)
+- `<ml-venv>/bin/python -m pytest tests/test_ml_integration.py -m ml -s` —
+  real-model acceptance run; prints the score table for docs/guardrails.md
 - `uv run ruff check .` — lint
 
 ## Architecture
@@ -50,9 +52,20 @@ must not be reintroduced (see docs/guardrails.md).
   changing GUARD_MODEL_ID requires re-checking label semantics against
   BENIGN_LABELS in classifier.py, and re-running the measured FP/FN table in
   docs/guardrails.md
-- Known PIGuard false positive: long tracking-URL query strings score ~1.0
-  (every marketing email). Fix belongs in the client (normalise URLs to
-  host), not in the sidecar — see docs/guardrails.md
+- `src/guard_api/chunking.py` — sliding windows whose starts snap back to a
+  boundary (GUARD_CHUNK_SNAP); `context_window()` backs the opt-in marginal
+  re-score (GUARD_MARGIN, default off — measured to let attacks through)
+- `tests/test_ml_integration.py` (marker `ml`) — acceptance run against the
+  real model from a throwaway ML env; `tests/fixtures/build_cta.py` builds
+  the synthetic newsletter/probe sets; `tests/fixtures/*.eml` are gitignored
+- Known PIGuard false positives: long tracking-URL query strings score ~1.0
+  (every marketing email) — fix is client-side URL normalisation; and any
+  client instruction placed *after* the document inside the scanned `user`
+  message (gmailclassifier's "Respond with ONLY a JSON object…" tail lifts
+  every email to ~0.7 and marketing mail over 0.85) — fix is moving client
+  instructions to `system`. Neither is fixable in the sidecar; shrinking
+  GUARD_CHUNK_CHARS (~500) is the sidecar-side win but only after the
+  wrapper fix — see docs/guardrails.md "Chunk size"
 - The stack is deployed on a separate homelab host; this checkout has no
   `.env` and no running containers
 

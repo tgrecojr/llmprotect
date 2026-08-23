@@ -61,9 +61,18 @@ def texts_to_scan(req: GuardrailRequest) -> list[str]:
     return req.texts or []
 
 
+def risk_label(result: Any) -> str:
+    """`risk=0.855` — or `risk=0.855 (context 0.412)` when the marginal hit was
+    re-scored inside a wider window and that second score decided."""
+    label = f"risk={result.score:.3f}"
+    if getattr(result, "rescored", False):
+        label += f" (context {result.rescore:.3f})"
+    return label
+
+
 def blocked_reason(result: Any, threshold: float, detail: bool) -> str:
     """Human-readable reason that LiteLLM surfaces as the error message."""
-    reason = f"prompt injection detected (risk={result.score:.3f} >= threshold {threshold})"
+    reason = f"prompt injection detected ({risk_label(result)} >= threshold {threshold})"
     if detail:
         reason += f" in {result.location}: {result.excerpt!r}"
     return reason
@@ -86,6 +95,8 @@ def create_app(classifier: Any = None, settings: Settings | None = None) -> Fast
                 trust_remote_code=app_settings.trust_remote_code,
                 chunk_chars=app_settings.chunk_chars,
                 chunk_overlap=app_settings.chunk_overlap,
+                chunk_snap=app_settings.chunk_snap,
+                margin=app_settings.margin,
             )
             logger.info("model loaded")
         yield
@@ -111,26 +122,28 @@ def create_app(classifier: Any = None, settings: Settings | None = None) -> Fast
             threshold = float(extra["threshold"])
 
         for index, text in enumerate(texts_to_scan(req)):
-            result = request.app.state.classifier.assess(text)
+            result = request.app.state.classifier.assess(text, threshold)
             # Every score is logged (not just blocks) so near-misses and drift
-            # are visible: `docker compose logs guard | grep scored`.
+            # are visible: `docker compose logs guard | grep scored`. A
+            # re-scored marginal hit adds `context=…` (the deciding score).
             logger.info(
-                "scored call_id=%s text=%d risk=%.3f threshold=%.2f chunks=%d",
+                "scored call_id=%s text=%d risk=%.3f%s threshold=%.2f chunks=%d",
                 req.litellm_call_id,
                 index,
                 result.score,
+                f" context={result.rescore:.3f}" if result.rescored else "",
                 threshold,
                 result.chunk_count,
             )
-            if result.score >= threshold:
+            if result.blocks(threshold):
                 # The excerpt (already Presidio-masked upstream) is emitted
                 # unless GUARD_BLOCK_DETAIL=0 — one switch governs both the
                 # container log and the LiteLLM-visible reason.
                 logger.warning(
-                    "blocked call_id=%s text=%d risk=%.3f threshold=%.2f %s excerpt=%r",
+                    "blocked call_id=%s text=%d %s threshold=%.2f %s excerpt=%r",
                     req.litellm_call_id,
                     index,
-                    result.score,
+                    risk_label(result),
                     threshold,
                     result.location,
                     result.excerpt if app_settings.block_detail else "<off>",
