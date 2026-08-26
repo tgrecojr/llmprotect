@@ -3,7 +3,7 @@
 # Renovate keeps builder (:latest-dev) and runtime (:latest) in lockstep so
 # the venv's interpreter always matches the runtime Python.
 
-FROM cgr.dev/chainguard/python:latest-dev@sha256:4bf7e945777010672b8ccd5d2ae2c41c91ad6d3478878347c731ae536d506bef AS builder
+FROM cgr.dev/chainguard/python:latest-dev@sha256:f6d6485f11a65ca81d8a2d01eae564fa88937e7d19c1cf216cdb1142980c51bd AS builder
 
 USER root
 
@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Both must exist in the image owned by nonroot or the mount inherits root.
 RUN mkdir -p /cache /app/data && chown -R nonroot:nonroot /app /cache
 
-FROM cgr.dev/chainguard/python:latest@sha256:1f6779775c9f466890da563e411cb677045a6c20b6a65160eefad1deffb5012c
+FROM cgr.dev/chainguard/python:latest@sha256:069011a0d23f43c1cb6fbee4e1d21f741107db4ba60c298258290b46ceefdcba
 
 WORKDIR /app
 
