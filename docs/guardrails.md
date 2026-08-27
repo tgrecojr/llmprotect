@@ -204,14 +204,58 @@ each of three documents, threshold 0.85:
 | 500 / 50 | 0.414 / 0.008 / 0.012 | 22 / 24 |
 | 300 / 30 | 0.376 / 0.047 / 0.025 | 24 / 24 |
 
-Smaller windows fix most of the dilution misses at no false-positive cost —
-**but only once the wrapper is out of the scanned message**: with today's
-layout, 500-char windows block the wrapper floor itself (B4 0.917, B2 1.000,
-incident 0.999). Order of operations: (1) gmailclassifier moves its
-instructions to `system`; (2) lower `GUARD_CHUNK_CHARS` to ~500 (overlap
-50) and re-run `tests/test_ml_integration.py -m ml`; (3) calibrate
-`GUARD_THRESHOLD` from the `scored` log (`docs/spec-cta-false-positive.md`
-§4.C).
+On the synthetic set, smaller windows fix most of the dilution misses at no
+false-positive cost. **Real traffic says otherwise — see the next section
+before changing `GUARD_CHUNK_CHARS`.**
+
+### Real traffic replay (2026-08-27) — what actually happened in production
+
+`GUARD_CAPTURE_DIR` ran 2026-08-23→27 and collected 220 scans of 119 unique
+gmailclassifier emails. Two findings, both of which override the synthetic
+tables above:
+
+**1. The wrapper fix had not shipped.** gmailclassifier #151 (2026-08-23)
+added URL normalisation and a short `system` prompt, but left the label
+preamble ("Your task is to categorize…") *and* the output-format tail in the
+`user` message. 218/220 captured texts carry both. Result: **106/119 unique
+emails blocked (90%)**. The preamble chunk alone scores ~0.88 — a Socket
+newsletter was blocked on chunk 1/3 whose excerpt is purely our label list —
+and the chunk holding the JSON tail has a median of 0.96. gmailclassifier
+retried every block 5× on a 30 m-doubling schedule; blocks are
+deterministic, so each email cost six guard scans and ended unlabeled.
+
+**2. Re-scoring the same 118 fenced emails with the wrapper stripped**
+(scratchpad ML venv, PIGuard @ pinned revision), i.e. what the guard sees
+once all instructions are in `system`:
+
+| Scanned text | blocked @ 0.85 | @ 0.90 | @ 0.95 | median |
+|---|---|---|---|---|
+| as sent (wrapper in `user`), chunk 2000/200 | **106 / 118 (90%)** | 99 | 73 | 0.969 |
+| email body only, chunk 2000/200 | **6 / 118 (5%)** | 4 | 3 | 0.138 |
+| email body only, chunk 500/50 | 33 / 118 (28%) | 33 | 27 | 0.185 |
+
+Consequences:
+
+- **Shrinking the window is the wrong move for real mail.** 500-char windows
+  isolate CTA-dense paragraphs of long marketing emails and quintuple the
+  false-positive rate. The synthetic "22/24 attacks caught" gain does not
+  survive contact with a real inbox. `GUARD_CHUNK_CHARS` stays at 2000.
+- The "irreducible security-alert" class does not exist. The Vaultwarden
+  "New Device Logged In" alert that blocked at 0.994 scores **0.146** on its
+  body alone; the Vector alarm-panel notifications (0.90–0.95 as sent) score
+  0.015. Every one of those blocks was the wrapper.
+- The residual 5% are long, CTA-dense marketing pieces (a "LIVE" event mail
+  1.000, a health newsletter 1.000, USPS marketing 0.96, pest control 0.90,
+  a receipt 0.89, a crypto promo 0.87). That is the real false-positive
+  class to set policy on — and it is small enough to *flag* rather than fix:
+  gmailclassifier now labels a blocked email `Flagged`, leaves it in the
+  inbox and stops retrying.
+
+Order of operations, revised: (1) gmailclassifier sends the fenced email as
+the *entire* `user` message and everything else as `system` (a unit test
+now enforces this); (2) collect a fresh week of captures and replay; (3)
+only then consider a per-key `GUARD_THRESHOLD` (0.95 would take the
+residual 6 → 3). Not on the list: chunk-size changes.
 
 **Consequences for client apps that feed third-party documents (email, web
 pages, tickets) through the proxy:**
@@ -286,9 +330,9 @@ pages, tickets) through the proxy:**
   synthetic probe sets get replaced by measured traffic before touching
   `GUARD_CHUNK_CHARS`. The directory holds real (masked) mail: gitignored,
   not baked into the image, delete when done.
-- `GUARD_CHUNK_CHARS` / `GUARD_CHUNK_OVERLAP`: window size and overlap (see
-  "Chunk size" — shrink the window only after clients keep their
-  instructions out of `user`).
+- `GUARD_CHUNK_CHARS` / `GUARD_CHUNK_OVERLAP`: window size and overlap. Keep
+  at 2000/200: on captured real mail, 500-char windows raised the benign
+  block rate from 5% to 28% (see "Real traffic replay").
 - `GUARD_CHUNK_SNAP` (default 200, `0` = fixed windows). **Gains:** windows
   never open mid-word, so `blocked` excerpts and `blocked_reason` read as a
   sentence instead of `ing, now is the time…`; neighbouring windows overlap
