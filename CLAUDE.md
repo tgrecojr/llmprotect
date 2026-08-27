@@ -67,12 +67,13 @@ must not be reintroduced (see docs/guardrails.md).
   the synthetic newsletter/probe sets; `tests/fixtures/*.eml` are gitignored
 - Known PIGuard false positives: long tracking-URL query strings score ~1.0
   (every marketing email) — fix is client-side URL normalisation; and any
-  client instruction placed *after* the document inside the scanned `user`
-  message (gmailclassifier's "Respond with ONLY a JSON object…" tail lifts
-  every email to ~0.7 and marketing mail over 0.85) — fix is moving client
-  instructions to `system`. Neither is fixable in the sidecar; shrinking
-  GUARD_CHUNK_CHARS (~500) is the sidecar-side win but only after the
-  wrapper fix — see docs/guardrails.md "Chunk size"
+  client instruction inside the scanned `user` message (gmailclassifier's
+  label preamble + "Respond with ONLY a JSON object…" tail blocked 90% of
+  real mail, 2026-08-23→27) — fix is moving *all* client instructions to
+  `system` (shipped in gmailclassifier 2026-08-27 with a regression test).
+  Neither is fixable in the sidecar. Do NOT shrink GUARD_CHUNK_CHARS: on
+  captured real mail 500-char windows raise benign blocks from 5% to 28% —
+  see docs/guardrails.md "Real traffic replay"
 - The stack is deployed on a separate homelab host; this checkout has no
   `.env` and no running containers
 

@@ -48,3 +48,4 @@ tests/fixtures/*.eml
 
 # Guard traffic capture (GUARD_CAPTURE_DIR bind mount; real prompt text)
 data/
+capture/
